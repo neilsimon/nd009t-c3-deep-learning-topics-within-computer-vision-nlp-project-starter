@@ -131,7 +131,7 @@ def main(args):
     '''
     loss_criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(model.parameters(), lr=args.lr, eps=args.eps, weight_decay=args.weight_decay)
-    print("\nHyperparameters [Learning Rate {:.4e}, eps {:.4e}, weight decay {:.4e}\n".format(args.lr, args,eps, args.weight_decay))
+    print("\nHyperparameters [Learning Rate {:.4e}, eps {:.4e}, weight decay {:.4e}\n".format(args.lr, args.eps, args.weight_decay))
     
     for epoch in range(1, args.epochs + 1):
         model = train(model, train_loader, loss_criterion, optimizer)
