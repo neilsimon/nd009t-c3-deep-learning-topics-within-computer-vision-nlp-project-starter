@@ -17,11 +17,14 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 import argparse
 
-def test(model, test_loader, criterion):
+def test(model, test_loader, criterion, device):
+    model.eval()
     test_loss = 0
     correct = 0
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(test_loader):
+            data=data.to(device)
+            target=target.to(device)
             output = model(data)
             #test_loss += criterion(output, target, reduction="sum").item()  # sum up batch loss
             test_loss += criterion(output, target).item() * data.size(0)  # sum up batch loss
@@ -38,19 +41,22 @@ def test(model, test_loader, criterion):
     return test_loss
     pass
 
-def train(model, train_loader, criterion, optimizer):
+def train(model, train_loader, criterion, optimizer, device):
     model.train()
     running_loss=0
     correct=0
     for batch_idx, (data, target) in enumerate(train_loader):
-        #data=data.to(device)
-        #target=target.to(device)
+        data=data.to(device)
+        target=target.to(device)
         optimizer.zero_grad()
-        pred = model(data)
-        loss = criterion(pred, target)
+        output = model(data)
+        pred = output.argmax(dim=1, keepdim=True)
+        correct += pred.eq(target.view_as(pred)).sum().item()
+        loss = criterion(output, target)
+        running_loss+=loss.item()*data.size(0)
         loss.backward()
         optimizer.step()
-        if batch_idx % 100 == 0:
+        if batch_idx % 10 == 0:
             print(
                 "Train [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
                     batch_idx * len(data),
@@ -59,7 +65,11 @@ def train(model, train_loader, criterion, optimizer):
                     loss.item(),
                 )
             )
-    return model
+    print(
+        "\nTrain set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n".format(
+            running_loss/len(train_loader.dataset), correct, len(train_loader.dataset), 100.0 * correct / len(train_loader.dataset)
+        )
+    )
     pass
     
 def net():
@@ -74,30 +84,10 @@ def net():
     return model
     pass
 
-def create_data_loaders(data, batch_size, test_batch_size):
+def create_data_loaders(data, batch_size, test_batch_size, num_cpus, num_gpus):
     train_kwargs = {"batch_size": batch_size}
     test_kwargs = {"batch_size": test_batch_size}
-    '''
-    This is an optional function that you may or may not need to implement
-    depending on whether you need to use data loaders or not
-    '''
-    
-    train_files = os.listdir(os.path.join(data,'train'))
-    dog_name_to_category_train={};
-    dog_category_to_name_train={};
-    for name in train_files:
-        row = name.split('.')
-        dog_name_to_category_train[int(row[0])] = row[1]
-        dog_category_to_name_train[row[1]] = int(row[0])
-        
-    test_files = os.listdir(os.path.join(data,'test'))
-    dog_name_to_category_test={};
-    dog_category_to_name_test={};
-    for name in test_files:
-        row = name.split('.')
-        dog_name_to_category_test[int(row[0])] = row[1]
-        dog_category_to_name_test[row[1]] = int(row[0])
-        
+            
     train_transform = transforms.Compose([
         transforms.Resize(256),
         transforms.RandomCrop(224),
@@ -109,15 +99,21 @@ def create_data_loaders(data, batch_size, test_batch_size):
     test_transform = transforms.Compose([
         transforms.Resize(256),
         transforms.RandomCrop(224),
-        transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
     
+    # Naively set the worker count to a maximum of 4 and the number of gpus, if gpus are set, and cpus if cpus are set.
+    worker_count = 4
+    if num_gpus > 0:
+        worker_count = min(num_gpus, worker_count)
+    elif num_cpus > 0:
+        worker_count = min(num_cpus, worker_count)
+    
     train_dataset = torchvision.datasets.ImageFolder(os.path.join(data,'train'), transform=train_transform)
-    test_dataset = torchvision.datasets.ImageFolder(os.path.join(data,'test'), transform=test_transform)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size, shuffle=True, num_workers=2)
-    test_loader = torch.utils.data.DataLoader(test_dataset, test_batch_size, num_workers=2)
+    test_dataset = torchvision.datasets.ImageFolder(os.path.join(data,'valid'), transform=test_transform)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size, shuffle=True, num_workers=worker_count)
+    test_loader = torch.utils.data.DataLoader(test_dataset, test_batch_size, num_workers=worker_count)
     
     return train_loader, test_loader
     pass
@@ -125,7 +121,11 @@ def create_data_loaders(data, batch_size, test_batch_size):
 def main(args):
     model=net()
     
-    train_loader, test_loader = create_data_loaders(args.data_dir, args.batch_size, args.test_batch_size)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    
+    model=model.to(device)
+    
+    train_loader, test_loader = create_data_loaders(args.data_dir, args.batch_size, args.test_batch_size, args.num_cpus, args.num_gpus)
     
     '''
     We use the CrossEntropyLoss loss function as we are categorising across 133 categories.
@@ -135,8 +135,10 @@ def main(args):
     print("\nHyperparameters [Learning Rate {:.4e}, eps {:.4e}, weight decay {:.4e}\n".format(args.lr, args.eps, args.weight_decay))
     
     for epoch in range(1, args.epochs + 1):
-        model = train(model, train_loader, loss_criterion, optimizer)
-        loss = test(model, test_loader, loss_criterion)
+        print("\nEpoch: {}\nTraining".format(epoch))
+        train(model, train_loader, loss_criterion, optimizer, device)
+        print("\nEpoch: {}\nTesting".format(epoch))
+        loss = test(model, test_loader, loss_criterion, device)
     
     '''
     Save the trained model
@@ -188,7 +190,8 @@ if __name__=='__main__':
     parser.add_argument("--model-dir", type=str, default=os.environ["SM_MODEL_DIR"])
     parser.add_argument("--data-dir", type=str, default=os.environ["SM_CHANNEL_TRAINING"])
     parser.add_argument("--num-gpus", type=int, default=os.environ["SM_NUM_GPUS"])
-    
+    parser.add_argument("--num-cpus", type=int, default=os.environ["SM_NUM_CPUS"])
+
     args=parser.parse_args()
     
     main(args)

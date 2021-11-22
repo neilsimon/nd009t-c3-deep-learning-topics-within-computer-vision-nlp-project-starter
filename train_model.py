@@ -36,6 +36,7 @@ def test(model, test_loader, criterion, hook):
             output = model(data)
             test_loss += criterion(output, target).item() * data.size(0)  # sum up batch loss
             pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
+            correct += pred.eq(target.view_as(pred)).sum().item()
             print(
                 "Test [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
                     batch_idx * len(data),
@@ -44,7 +45,6 @@ def test(model, test_loader, criterion, hook):
                     test_loss/((1+batch_idx) * len(data)),
                 )
             )
-            correct += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(test_loader.dataset)
 
@@ -73,14 +73,15 @@ def train(model, train_loader, criterion, optimizer, hook):
         running_loss+=loss.item()*data.size(0)
         loss.backward()
         optimizer.step()
-        print(
-            "Train [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
-                batch_idx * len(data),
-                len(train_loader.dataset),
-                100.0 * batch_idx / len(train_loader),
-                loss.item(),
+        if batch_idx % 10 == 0:
+            print(
+                "Train [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
+                    batch_idx * len(data),
+                    len(train_loader.dataset),
+                    100.0 * batch_idx / len(train_loader),
+                    loss.item(),
+                )
             )
-        )
     print(
         "\nTrain set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n".format(
             running_loss/len(train_loader.dataset), correct, len(train_loader.dataset), 100.0 * correct / len(train_loader.dataset)
@@ -104,8 +105,8 @@ def create_data_loaders(data, batch_size, test_batch_size):
     train_kwargs = {"batch_size": batch_size}
     test_kwargs = {"batch_size": test_batch_size}
     
-    train_files = os.listdir(os.path.join(data,'train'))
-    test_files = os.listdir(os.path.join(data,'test'))
+    #train_files = os.listdir(os.path.join(data,'train'))
+    #test_files = os.listdir(os.path.join(data,'test'))
         
     train_transform = transforms.Compose([
         transforms.Resize(256),
@@ -178,7 +179,7 @@ if __name__=='__main__':
     parser.add_argument(
         "--epochs",
         type=int,
-        default=20,
+        default=10,
         metavar="N",
         help="number of epochs to train (default: 10)",
     )
