@@ -9,10 +9,11 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
-from PIL import Image,ImageFile
-ImageFile.LOAD_TRUNCATED_IMAGES = True
 import os
 import json
+
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 import argparse
 
