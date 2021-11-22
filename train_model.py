@@ -1,5 +1,3 @@
-#TODO: Import your dependencies.
-#For instance, below are some dependencies you might need if you are using Pytorch
 import numpy as np
 import torch
 import torch.nn as nn
@@ -22,10 +20,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 import argparse
 
-
-#TODO: Import dependencies for Debugging andd Profiling
-
-def test(model, test_loader, criterion, hook):
+def test(model, test_loader, criterion, device, hook):
     model.eval()
     hook.set_mode(smd.modes.EVAL)
     hook.register_loss(criterion)
@@ -33,18 +28,12 @@ def test(model, test_loader, criterion, hook):
     correct = 0
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(test_loader):
+            data=data.to(device)
+            target=target.to(device)
             output = model(data)
             test_loss += criterion(output, target).item() * data.size(0)  # sum up batch loss
             pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
             correct += pred.eq(target.view_as(pred)).sum().item()
-            print(
-                "Test [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
-                    batch_idx * len(data),
-                    len(test_loader.dataset),
-                    100.0 * batch_idx / len(test_loader),
-                    test_loss/((1+batch_idx) * len(data)),
-                )
-            )
 
     test_loss /= len(test_loader.dataset)
 
@@ -56,15 +45,15 @@ def test(model, test_loader, criterion, hook):
     return test_loss
     pass
 
-def train(model, train_loader, criterion, optimizer, hook):
+def train(model, train_loader, criterion, optimizer, device, hook):
     model.train()
     hook.set_mode(smd.modes.TRAIN)
     hook.register_loss(criterion)
     running_loss=0
     correct=0
     for batch_idx, (data, target) in enumerate(train_loader):
-        #data=data.to(device)
-        #target=target.to(device)
+        data=data.to(device)
+        target=target.to(device)
         optimizer.zero_grad()
         output = model(data)
         pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
@@ -101,13 +90,10 @@ def net():
     return model
     pass
 
-def create_data_loaders(data, batch_size, test_batch_size):
+def create_data_loaders(data, batch_size, test_batch_size, num_cpus, num_gpus):
     train_kwargs = {"batch_size": batch_size}
     test_kwargs = {"batch_size": test_batch_size}
     
-    #train_files = os.listdir(os.path.join(data,'train'))
-    #test_files = os.listdir(os.path.join(data,'test'))
-        
     train_transform = transforms.Compose([
         transforms.Resize(256),
         transforms.RandomCrop(224),
@@ -123,10 +109,17 @@ def create_data_loaders(data, batch_size, test_batch_size):
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
     
+    # Naively set the worker count to a maximum of 4 and the number of gpus, if gpus are set, and cpus if cpus are set.
+    worker_count = 4
+    if num_gpus > 0:
+        worker_count = min(num_gpus, worker_count)
+    elif num_cpus > 0:
+        worker_count = min(num_cpus, worker_count)
+    
     train_dataset = torchvision.datasets.ImageFolder(os.path.join(data,'train'), transform=train_transform)
     test_dataset = torchvision.datasets.ImageFolder(os.path.join(data,'test'), transform=test_transform)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size, shuffle=True, num_workers=4)
-    test_loader = torch.utils.data.DataLoader(test_dataset, test_batch_size, num_workers=4)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size, shuffle=True, num_workers=worker_count)
+    test_loader = torch.utils.data.DataLoader(test_dataset, test_batch_size, num_workers=worker_count)
     
     return train_loader, test_loader
 
@@ -138,7 +131,11 @@ def main(args):
     hook = smd.Hook.create_from_json_file()
     hook.register_hook(model)
     
-    train_loader, test_loader = create_data_loaders(args.data_dir, args.batch_size, args.test_batch_size)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    
+    model=model.to(device)
+    
+    train_loader, test_loader = create_data_loaders(args.data_dir, args.batch_size, args.test_batch_sizedevice = torch.device("cuda:0" if torch.cuda.is_available() else "cpu"))
 
     '''
     We use the CrossEntropyLoss loss function as we are categorising across 133 categories.
@@ -149,9 +146,9 @@ def main(args):
     
     for epoch in range(1, args.epochs + 1):
         print("\nEpoch: {}\nTraining".format(epoch))
-        train(model, train_loader, loss_criterion, optimizer, hook)
+        train(model, train_loader, loss_criterion, optimizer, device, hook)
         print("\nEpoch: {}\nTesting".format(epoch))
-        loss = test(model, test_loader, loss_criterion, hook)
+        loss = test(model, test_loader, loss_criterion, device, hook)
     
     '''
     Save the trained model
@@ -159,7 +156,7 @@ def main(args):
     torch.save(model, os.path.join(args.model_dir, 'model.pth'))
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser()
+    parser = argparse.ArgumentParser()
     
     # Data and model checkpoints directories
     parser.add_argument(
@@ -179,7 +176,7 @@ if __name__=='__main__':
     parser.add_argument(
         "--epochs",
         type=int,
-        default=10,
+        default=20,
         metavar="N",
         help="number of epochs to train (default: 10)",
     )
@@ -203,6 +200,7 @@ if __name__=='__main__':
     parser.add_argument("--model-dir", type=str, default=os.environ["SM_MODEL_DIR"])
     parser.add_argument("--data-dir", type=str, default=os.environ["SM_CHANNEL_TRAINING"])
     parser.add_argument("--num-gpus", type=int, default=os.environ["SM_NUM_GPUS"])
+    parser.add_argument("--num-cpus", type=int, default=os.environ["SM_NUM_CPUS"])
     
     args=parser.parse_args()
     
