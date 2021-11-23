@@ -4,7 +4,8 @@
 This project takes a pretrained CNN model (Resnet18) and finetunes it for use in classifying dog breeds into 133 classifications based on a Dog Breeds dataset.
 
 The steps that the notebook goes through are:
-1. Retrieving a dataset'
+
+1. Retrieving a dataset
 1. Uncompressing that dataset.
 1. Uploading that dataset to an S3 bucket.
 1. Setting up hyperparameter tuning using learning rate, weight decay, eps and batch size using the AdamW optimizer on ResNet18.
@@ -28,11 +29,11 @@ These hyperparameters gave me broad coverage of the tunables for the system. I c
 
 ![Hyperparameter Training Job](Hyperparameter_training_job.png?raw=true "Hyperparameter training job")
 
-![](Hyperparameters_best_results.png?raw=true "Hyperparameters best results")
+![Hyperparameters best results](Hyperparameters_best_results.png?raw=true "Hyperparameters best results")
 
-![](Training_job_resource_use.png?raw=true "Training job resource use")
+![Training job resource use](Training_job_resource_use.png?raw=true "Training job resource use")
 
-![](Training_job_output.png?raw=true "Training job output")
+![Training job output](Training_job_output.png?raw=true "Training job output")
 
 
 ### Results
@@ -41,9 +42,9 @@ I found debugging the system was painful. The long turnaround between making a c
 ## Model Deployment
 The deployed model runs a tuned version of ResNet18 and accepts data as preprocessed in the notebook.
 
-![](deployed_endpoint.png?raw=true "Deployed endpoint")
+![Deployed endpoint](deployed_endpoint.png?raw=true "Deployed endpoint")
 
-![](testImages/Penny.png?raw=true "Penny for testing")
+![Penny for testing](testImages/Penny.png?raw=true "Penny for testing")
 
-![](Using the endpoint.png?raw=true "Using the endpoint")
+![Using the endpoint](Using the endpoint.png?raw=true "Using the endpoint")
 
