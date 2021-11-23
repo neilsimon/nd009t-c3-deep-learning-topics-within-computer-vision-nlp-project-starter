@@ -10,10 +10,10 @@ from torch.utils.data import DataLoader
 import os
 import json
 
-import smdebug.pytorch as smd
-from smdebug import modes
-from smdebug.profiler.utils import str2bool
-from smdebug.pytorch import get_hook
+#import smdebug.pytorch as smd
+#from smdebug import modes
+#from smdebug.profiler.utils import str2bool
+#from smdebug.pytorch import get_hook
 
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -22,8 +22,8 @@ import argparse
 
 def test(model, test_loader, criterion, device, hook):
     model.eval()
-    hook.set_mode(smd.modes.EVAL)
-    hook.register_loss(criterion)
+    #hook.set_mode(smd.modes.EVAL)
+    #hook.register_loss(criterion)
     test_loss = 0
     correct = 0
     with torch.no_grad():
@@ -47,8 +47,8 @@ def test(model, test_loader, criterion, device, hook):
 
 def train(model, train_loader, criterion, optimizer, device, hook):
     model.train()
-    hook.set_mode(smd.modes.TRAIN)
-    hook.register_loss(criterion)
+    #hook.set_mode(smd.modes.TRAIN)
+    #hook.register_loss(criterion)
     running_loss=0
     correct=0
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -123,19 +123,31 @@ def create_data_loaders(data, batch_size, test_batch_size, num_cpus, num_gpus):
     
     return train_loader, test_loader
 
+def model_fn(model_dir):
+    model = net()
+    with open(os.path.join(model_dir, "model.pth"), "rb") as f:
+        model.load_state_dict(torch.load(f))
+    return model
+
+
+def save_model(model, model_dir):
+    path = os.path.join(model_dir, "model.pth")
+    torch.save(model.cpu().state_dict(), path)
+
 def main(args):
     '''
     Initialize a model by calling the net function
     '''
     model=net()
-    hook = smd.Hook.create_from_json_file()
-    hook.register_hook(model)
+    #hook = smd.Hook.create_from_json_file()
+    #hook.register_hook(model)
+    hook=''
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     
     model=model.to(device)
     
-    train_loader, test_loader = create_data_loaders(args.data_dir, args.batch_size, args.test_batch_sizedevice = torch.device("cuda:0" if torch.cuda.is_available() else "cpu"))
+    train_loader, test_loader = create_data_loaders(args.data_dir, args.batch_size, args.test_batch_size, args.num_cpus, args.num_gpus)
 
     '''
     We use the CrossEntropyLoss loss function as we are categorising across 133 categories.
@@ -154,6 +166,8 @@ def main(args):
     Save the trained model
     '''
     torch.save(model, os.path.join(args.model_dir, 'model.pth'))
+    torch.save(model.state_dict(), "model.pt")
+    save_model(model, args.model_dir)
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
@@ -176,7 +190,7 @@ if __name__=='__main__':
     parser.add_argument(
         "--epochs",
         type=int,
-        default=20,
+        default=10,
         metavar="N",
         help="number of epochs to train (default: 10)",
     )
